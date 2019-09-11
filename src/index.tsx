@@ -34,7 +34,6 @@ export interface PizzaOrder {
 }
 
 interface FormValues {
-    email: string;
     toppings: string[];
     city: City;
     size: PizzaSize;
@@ -74,26 +73,32 @@ const pizzaSizeOptions: Item[] = [
 const emptyOption: Item = {value: "", label: ""};
 
 
-const email = DOOV.string(DOOV.field('email'));
 const toppings = DOOV.iterable(DOOV.field<object, Item[]>('toppings'));
 const city = DOOV.f(DOOV.field<object, Item>('city'));
 const size = DOOV.string(DOOV.field<object, string>('size'));
+
 const optionsValue = new Function<Item[]>(new FunctionMetadata('options value'), (obj: object, ctx?: any) => {
     return ctx!.props['options'];
 }, (obj: object, value: Item[], ctx?) => {
     return (ctx!.props['options'] as unknown as Item[]) = value;
 });
+
 const itemValues = Function.contextual(new FunctionMetadata('item field values'), (obj, ctx) => {
     return ctx!.props['value'] as unknown as Item[];
 });
+
 const singleItemValue = Function.contextual(new FunctionMetadata('item field value'), (obj, ctx) => {
     return ctx!.props['value'] as unknown as Item;
 });
 
-const emailNotNull = DOOV.when(email.isNullOrUndefined().not()).validate();
-const cityNotNull = DOOV.when(city.notEq(emptyOption)).validate();
-const emailValid = DOOV.when(email
-    .mapTo(DOOV.BooleanFunction, (v: string) => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i.test(v))).validate();
+const cityNotEmpty = DOOV.when(city.notEq(emptyOption)).validate();
+
+const emptyToppings = DOOV.when(toppings.isNotEmpty()).validate();
+
+// const emailNotNull = DOOV.when(email.isNullOrUndefined().not()).validate();
+
+// const emailValid = DOOV.when(email
+//     .mapTo(DOOV.BooleanFunction, (v: string) => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i.test(v))).validate();
 
 const formikEnhancer = withFormik({
     mapPropsToValues: props => ({
@@ -101,25 +106,23 @@ const formikEnhancer = withFormik({
         size: '',
         crust: emptyOption,
         city: emptyOption,
-        email: undefined,
     }),
     validate: (values) => {
         let errors: any = {};
-        if (!cityNotNull.execute(values).value) {
+        if (!cityNotEmpty.execute(values).value) {
             errors.city = 'Required';
         }
-        if (!emailNotNull.execute(values).value) {
-            errors.email = 'Required';
-        } else if (!emailValid.execute(values).value) {
-            errors.email = 'Invalid email address';
+        if (!emptyToppings.execute(values).value) {
+            errors.toppings = 'Add at least one topping';
         }
         return errors;
     },
     handleSubmit: (values, {setSubmitting}) => {
+        console.log(values);
         const payload = {
             ...values,
             city: values.city.value,
-            topics: values.topics.map((t: Item) => t.value)
+            topics: values.toppings.map((t: Item) => t.value)
         };
         setTimeout(() => {
             alert(JSON.stringify(payload, null, 2));
@@ -136,22 +139,23 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
         touched,
         dirty,
         errors,
-        handleChange,
         handleBlur,
         handleSubmit,
         handleReset,
         setFieldValue,
-        isSubmitting
+        isSubmitting,
     } = props;
 
     const cityNotEmpty = DOOV.when(city.notEq(emptyOption)).validate();
 
-    const toppingsChangeRule = DOOV.mappings(
-        DOOV.when(city.mapTo(StringFunction, v => v!.value).notEq('hawaii'))
-            .then(DOOV.map(itemValues).to(toppings))
-            .otherwise(DOOV.map(itemValues.mapTo(Function, items => items!.filter(v => v.value !== 'pineapple')))
-                .to(optionsValue))
-    );
+    const toppingsChangeRule = DOOV.mappings(DOOV.map(itemValues).to(toppings));
+
+    const cityChangeRule = DOOV.mappings(
+        DOOV.map(singleItemValue).to(city),
+        DOOV.when(city.mapTo(StringFunction, v => v ? v.value : undefined).eq('hawaii'))
+            .then(DOOV.map(toppings.mapTo(Function, items => {
+                return items!.filter(v => v.value !== 'pineapple')
+            })).to(toppings)));
 
     const sizeChangeRule = DOOV.mappings(
         DOOV.map(singleItemValue).using(converter((obj, input, context) => {
@@ -160,7 +164,7 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
         })).to(size),
     );
 
-    const toppingsOptionsRule = DOOV.when(city.mapTo(StringFunction, v => v!.value).notEq('hawaii'))
+    const toppingsOptionsRule = DOOV.when(city.mapTo(StringFunction, v => v ? v.value : undefined).notEq('hawaii'))
         .then(DOOV.map(toppingOptions).to(optionsValue))
         .otherwise(DOOV.map(toppingOptions.filter(v => v.value !== 'pineapple')).to(optionsValue));
 
@@ -173,10 +177,12 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
         <form onSubmit={handleSubmit}>
             <StatefulField
                 name="city"
-                label="City"
+                label="Where do you live?"
                 component={Select}
+                formValues={values}
+                setFormValues={setValues}
                 options={cities}
-                onChange={(value: string) => setFieldValue("city", value)}
+                changeRule={cityChangeRule}
                 value={values.city}
                 onBlur={handleBlur}
                 error={errors.city}
@@ -184,7 +190,7 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
             />
             <StatefulField
                 label="Size"
-                name="size"
+                name="How hungry you are?"
                 component={Select}
                 formValues={values}
                 setFormValues={setValues}
@@ -198,7 +204,7 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
             />
             <StatefulField
                 name="toppings"
-                label="Toppings"
+                label="Which toppings you'd like?"
                 isMulti
                 component={Select}
                 formValues={values}
@@ -209,10 +215,11 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
                 changeRule={toppingsChangeRule}
                 onBlur={handleBlur}
                 error={errors.toppings}
+                touched={touched.toppings}
             />
             <StatefulField
                 name="crust"
-                label="Crust"
+                label="Which pizza crust you'd like?"
                 component={Select}
                 setFormValues={setValues}
                 formValues={values}
@@ -220,24 +227,11 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
                 optionsRule={crustOptionsRule}
                 // options={toppingOptions}
                 value={Object.keys(PizzaCrust).find(v => v === values.crust)}
-                // changeRule={toppingsChangeRule}
                 onChange={(value: Item) => setFieldValue('crust', value)}
                 onBlur={handleBlur}
                 error={errors.crust}
+                touched={touched.crust}
             />
-            <StatefulField
-                name="email"
-                label="Email"
-                component="input"
-                placeholder="Enter your email"
-                type="email"
-                value={values.email}
-                onChange={handleChange}
-                onBlur={handleBlur}
-            />
-            {errors.email && touched.email && (
-                <div style={{color: "red", marginTop: ".5rem"}}>{errors.email}</div>
-            )}
             <button
                 type="button"
                 className="outline"
@@ -247,7 +241,7 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
                 Reset
             </button>
             <button type="submit" disabled={isSubmitting}>
-                🍕
+                Get Pizza!
             </button>
 
             <DisplayFormikState {...props} />
@@ -307,8 +301,8 @@ class StatefulField extends React.Component<any> {
                 </label>
                 <Field
                     {...this.props}
-                    onChange={this.handleChange}
                     options={this.handleOptions()}
+                    onChange={this.handleChange}
                 />
                 {!!this.props.error && this.props.touched && (
                     <div style={{color: "red", marginTop: ".5rem"}}>
