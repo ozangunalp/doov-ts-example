@@ -6,7 +6,7 @@ import {Field, FormikProps, withFormik} from "formik";
 import Select from "react-select";
 import {DisplayFormikState} from "./formik-helper";
 import * as DOOV from 'doov';
-import {converter, DefaultContext, Function, FunctionMetadata, StringFunction} from 'doov';
+import {map, mappings, converter, when, DefaultContext, Function, FunctionMetadata, StringFunction} from 'doov';
 
 export type PizzaSize = 'S' | 'M' | 'L' | 'XL';
 
@@ -72,33 +72,28 @@ const pizzaSizeOptions: Item[] = [
 
 const emptyOption: Item = {value: "", label: ""};
 
-
 const toppings = DOOV.iterable(DOOV.field<object, Item[]>('toppings'));
 const city = DOOV.f(DOOV.field<object, Item>('city'));
 const size = DOOV.string(DOOV.field<object, string>('size'));
+const crust = DOOV.string(DOOV.field<object, string>('crust'));
 
-const optionsValue = new Function<Item[]>(new FunctionMetadata('options value'), (obj: object, ctx?: any) => {
+const optionsValue = new Function<Item[]>(new FunctionMetadata('field options'), (obj: object, ctx?: any) => {
     return ctx!.props['options'];
 }, (obj: object, value: Item[], ctx?) => {
     return (ctx!.props['options'] as unknown as Item[]) = value;
 });
 
-const itemValues = Function.contextual(new FunctionMetadata('item field values'), (obj, ctx) => {
+const itemValues = Function.contextual(new FunctionMetadata('field items'), (obj, ctx) => {
     return ctx!.props['value'] as unknown as Item[];
 });
 
-const singleItemValue = Function.contextual(new FunctionMetadata('item field value'), (obj, ctx) => {
+const singleItemValue = Function.contextual(new FunctionMetadata('field item'), (obj, ctx) => {
     return ctx!.props['value'] as unknown as Item;
 });
 
-const cityNotEmpty = DOOV.when(city.notEq(emptyOption)).validate();
+const cityNotEmpty = when(city.notEq(emptyOption)).validate();
 
-const emptyToppings = DOOV.when(toppings.isNotEmpty()).validate();
-
-// const emailNotNull = DOOV.when(email.isNullOrUndefined().not()).validate();
-
-// const emailValid = DOOV.when(email
-//     .mapTo(DOOV.BooleanFunction, (v: string) => /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,4}$/i.test(v))).validate();
+const emptyToppings = when(toppings.isNotEmpty()).validate();
 
 const formikEnhancer = withFormik({
     mapPropsToValues: props => ({
@@ -146,32 +141,39 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
         isSubmitting,
     } = props;
 
-    const cityNotEmpty = DOOV.when(city.notEq(emptyOption)).validate();
+    const cityNotEmpty = when(city.notEq(emptyOption)).validate();
 
-    const toppingsChangeRule = DOOV.mappings(DOOV.map(itemValues).to(toppings));
+    const itemValueConverter = converter((obj, input: Function<Item>, context) => {
+        let v = input.get(obj, context);
+        return v ? v.value : v;
+    }, 'item to value');
 
-    const cityChangeRule = DOOV.mappings(
-        DOOV.map(singleItemValue).to(city),
-        DOOV.when(city.mapTo(StringFunction, v => v ? v.value : undefined).eq('hawaii'))
-            .then(DOOV.map(toppings.mapTo(Function, items => {
+    // City Rules
+    const cityChangeRule = mappings(
+        // update City
+        map(singleItemValue).to(city),
+        // update Toppings
+        when(city.mapTo(StringFunction, v => v ? v.value : undefined).matchAny('hawaii', 'napoli'))
+            .then(map(toppings.mapTo(Function, items => {
                 return items!.filter(v => v.value !== 'pineapple')
             })).to(toppings)));
 
-    const sizeChangeRule = DOOV.mappings(
-        DOOV.map(singleItemValue).using(converter((obj, input, context) => {
-            let v = input.get(obj, context);
-            return v ? v.value : v;
-        })).to(size),
-    );
+    const sizeChangeRule = map(singleItemValue).using(itemValueConverter).to(size);
 
-    const toppingsOptionsRule = DOOV.when(city.mapTo(StringFunction, v => v ? v.value : undefined).notEq('hawaii'))
-        .then(DOOV.map(toppingOptions).to(optionsValue))
-        .otherwise(DOOV.map(toppingOptions.filter(v => v.value !== 'pineapple')).to(optionsValue));
+    // Toppings Rules
+    const toppingsOptionsRule = when(city.mapTo(StringFunction, v => v ? v.value : undefined).matchAny('hawaii', 'napoli'))
+        .then(map(toppingOptions.filter(v => v.value !== 'pineapple')).to(optionsValue))
+        .otherwise(map(toppingOptions).to(optionsValue));
 
-    const crustOptionsRule = DOOV.map(Object.keys(PizzaCrust).map(v => ({
-        value: v,
+    const toppingsChangeRule = mappings(map(itemValues).to(toppings));
+
+    // Crust Rules
+    const crustOptionsRule = map(Object.keys(PizzaCrust).map(v => ({
+        value: v.toLowerCase(),
         label: v
     }) as Item)).to(optionsValue);
+
+    const crustChangeRule = map(singleItemValue).using(itemValueConverter).to(crust);
 
     return (
         <form onSubmit={handleSubmit}>
@@ -223,6 +225,7 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
                 component={Select}
                 setFormValues={setValues}
                 formValues={values}
+                changeRule={crustChangeRule}
                 visibilityRule={cityNotEmpty}
                 optionsRule={crustOptionsRule}
                 // options={toppingOptions}
@@ -299,6 +302,7 @@ class StatefulField extends React.Component<any> {
                 <label htmlFor="function" style={{display: "block", margin: ".5rem"}}>
                     {this.props.label ? this.props.label : this.props.name}
                 </label>
+                {this.props.changeRule && (<span>{this.props.changeRule.metadata.readable}</span>)}
                 <Field
                     {...this.props}
                     options={this.handleOptions()}
