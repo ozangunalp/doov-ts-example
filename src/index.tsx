@@ -1,12 +1,13 @@
 import "./formik-demo.css";
 import * as React from "react";
+import {useContext} from "react";
 import {render} from "react-dom";
 import {Field, FormikProps, withFormik} from "formik";
 
 import Select from "react-select";
 import {DisplayFormikState} from "./formik-helper";
 import * as DOOV from 'doov';
-import {map, mappings, converter, when, DefaultContext, Function, FunctionMetadata, StringFunction} from 'doov';
+import {converter, DefaultContext, Function, FunctionMetadata, map, mappings, StringFunction, when} from 'doov';
 
 export type PizzaSize = 'S' | 'M' | 'L' | 'XL';
 
@@ -127,6 +128,16 @@ const formikEnhancer = withFormik({
     displayName: "MyForm"
 });
 
+type FormValuesContext = {
+    formValues: FormValues,
+    setFormValues: (v: FormValues) => void
+}
+
+let FormContext = React.createContext<FormValuesContext>({
+    formValues: {} as FormValues, setFormValues: v => {
+    }
+});
+
 const MyForm: React.SFC<FormikProps<FormValues>> = props => {
     const {
         values,
@@ -137,7 +148,6 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
         handleBlur,
         handleSubmit,
         handleReset,
-        setFieldValue,
         isSubmitting,
     } = props;
 
@@ -177,146 +187,132 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
 
     return (
         <form onSubmit={handleSubmit}>
-            <StatefulField
-                name="city"
-                label="Where do you live?"
-                component={Select}
-                formValues={values}
-                setFormValues={setValues}
-                options={cities}
-                changeRule={cityChangeRule}
-                value={values.city}
-                onBlur={handleBlur}
-                error={errors.city}
-                touched={touched.city}
-            />
-            <StatefulField
-                label="Size"
-                name="How hungry you are?"
-                component={Select}
-                formValues={values}
-                setFormValues={setValues}
-                visibilityRule={cityNotEmpty}
-                options={pizzaSizeOptions}
-                value={pizzaSizeOptions.find(v => v.value === values.size)}
-                changeRule={sizeChangeRule}
-                onBlur={handleBlur}
-                error={errors.size}
-                touched={touched.size}
-            />
-            <StatefulField
-                name="toppings"
-                label="Which toppings you'd like?"
-                isMulti
-                component={Select}
-                formValues={values}
-                setFormValues={setValues}
-                visibilityRule={cityNotEmpty}
-                optionsRule={toppingsOptionsRule}
-                value={values.toppings}
-                changeRule={toppingsChangeRule}
-                onBlur={handleBlur}
-                error={errors.toppings}
-                touched={touched.toppings}
-            />
-            <StatefulField
-                name="crust"
-                label="Which pizza crust you'd like?"
-                component={Select}
-                setFormValues={setValues}
-                formValues={values}
-                changeRule={crustChangeRule}
-                visibilityRule={cityNotEmpty}
-                optionsRule={crustOptionsRule}
-                // options={toppingOptions}
-                value={Object.keys(PizzaCrust).find(v => v === values.crust)}
-                onChange={(value: Item) => setFieldValue('crust', value)}
-                onBlur={handleBlur}
-                error={errors.crust}
-                touched={touched.crust}
-            />
-            <button
-                type="button"
-                className="outline"
-                onClick={handleReset}
-                disabled={!dirty || isSubmitting}
-            >
-                Reset
-            </button>
-            <button type="submit" disabled={isSubmitting}>
-                Get Pizza!
-            </button>
+            <FormContext.Provider value={{formValues: values, setFormValues: setValues}}>
+                <DOOVField
+                    name="city"
+                    label="Where do you live?"
+                    component={Select}
+                    options={cities}
+                    changeRule={cityChangeRule}
+                    value={values.city}
+                    onBlur={handleBlur}
+                    error={errors.city}
+                    touched={touched.city}
+                />
+                <DOOVField
+                    label="Size"
+                    name="How hungry you are?"
+                    component={Select}
+                    options={pizzaSizeOptions}
+                    visibilityRule={cityNotEmpty}
+                    value={pizzaSizeOptions.find(v => v.value === values.size)}
+                    changeRule={sizeChangeRule}
+                    onBlur={handleBlur}
+                    error={errors.size}
+                    touched={touched.size}
+                />
+                <DOOVField
+                    name="toppings"
+                    label="Which toppings you'd like?"
+                    isMulti
+                    component={Select}
+                    optionsRule={toppingsOptionsRule}
+                    visibilityRule={cityNotEmpty}
+                    value={values.toppings}
+                    changeRule={toppingsChangeRule}
+                    onBlur={handleBlur}
+                    error={errors.toppings}
+                    touched={touched.toppings}
+                />
+                <DOOVField
+                    name="crust"
+                    label="Which pizza crust you'd like?"
+                    component={Select}
+                    optionsRule={crustOptionsRule}
+                    visibilityRule={cityNotEmpty}
+                    changeRule={crustChangeRule}
+                    value={Object.keys(PizzaCrust).find(v => v === values.crust)}
+                    onBlur={handleBlur}
+                    error={errors.crust}
+                    touched={touched.crust}
+                />
+                <button
+                    type="button"
+                    className="outline"
+                    onClick={handleReset}
+                    disabled={!dirty || isSubmitting}
+                >
+                    Reset
+                </button>
+                <button type="submit" disabled={isSubmitting}>
+                    Get Pizza!
+                </button>
 
-            <DisplayFormikState {...props} />
+                <DisplayFormikState {...props} />
+            </FormContext.Provider>
         </form>
     );
 };
 
-class StatefulField extends React.Component<any> {
-    static defaultProps = {
-        isDisabled: false,
-        isVisible: true,
-        options: undefined,
+const DOOVField = (props: any) => {
+
+    const {formValues, setFormValues} = useContext(FormContext);
+
+    const handleVisibility = () => {
+        if (props.visibilityRule) {
+            const ctx = new DefaultContext();
+            return props.visibilityRule.execute(formValues, ctx).value;
+        } else {
+            return props.isVisible;
+        }
     };
 
-    constructor(props: any) {
-        super(props);
-        this.handleChange = this.handleChange.bind(this);
-        this.handleOptions = this.handleOptions.bind(this);
-        this.handleVisibility = this.handleVisibility.bind(this);
-    }
-
-    handleOptions() {
-        if (this.props.optionsRule) {
+    const handleOptions = () => {
+        if (props.optionsRule) {
             const ctx = new DefaultContext();
-            this.props.optionsRule.execute(this.props.formValues, ctx);
+            props.optionsRule.execute(formValues, ctx);
             return ctx.props['options'];
         } else {
-            return this.props.options;
-        }
-    }
-
-    handleVisibility() {
-        if (this.props.visibilityRule) {
-            const ctx = new DefaultContext();
-            return this.props.visibilityRule.execute(this.props.formValues, ctx).value;
-        } else {
-            return this.props.isVisible;
-        }
-    }
-
-    handleChange(value: any) {
-        if (this.props.changeRule) {
-            const ctx = new DefaultContext();
-            ctx.props['value'] = value;
-            this.props.setFormValues(this.props.changeRule.execute(this.props.formValues, ctx));
-        } else {
-            this.props.onChange(value);
+            return props.options;
         }
     };
 
-    render() {
-        return (
-            this.handleVisibility() &&
-            (<React.Fragment>
-                <label htmlFor="function" style={{display: "block", margin: ".5rem"}}>
-                    {this.props.label ? this.props.label : this.props.name}
-                </label>
-                {this.props.changeRule && (<span>{this.props.changeRule.metadata.readable}</span>)}
-                <Field
-                    {...this.props}
-                    options={this.handleOptions()}
-                    onChange={this.handleChange}
-                />
-                {!!this.props.error && this.props.touched && (
-                    <div style={{color: "red", marginTop: ".5rem"}}>
-                        {this.props.error}
-                    </div>
-                )}
-            </React.Fragment>)
-        );
-    }
-}
+    const handleChange = (value: any) => {
+        if (props.changeRule) {
+            const ctx = new DefaultContext();
+            ctx.props['value'] = value;
+            setFormValues(props.changeRule.execute(formValues, ctx));
+        } else {
+            props.onChange(value);
+        }
+    };
+
+    return (
+        handleVisibility() &&
+        (<React.Fragment>
+            <label htmlFor="function" style={{display: "block", margin: ".5rem"}}>
+                {props.label ? props.label : props.name}
+            </label>
+            {props.changeRule && (<span>{props.changeRule.metadata.readable}</span>)}
+            <Field
+                {...props}
+                options={handleOptions()}
+                onChange={handleChange}
+            />
+            {!!props.error && props.touched && (
+                <div style={{color: "red", marginTop: ".5rem"}}>
+                    {props.error}
+                </div>
+            )}
+        </React.Fragment>)
+    );
+};
+
+DOOVField.defaultProps = {
+    isDisabled: false,
+    isVisible: true,
+    options: undefined,
+};
 
 const MyEnhancedForm = formikEnhancer(MyForm);
 
