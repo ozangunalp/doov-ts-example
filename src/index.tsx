@@ -138,7 +138,7 @@ let FormContext = React.createContext<FormValuesContext>({
     }
 });
 
-const MyForm: React.SFC<FormikProps<FormValues>> = props => {
+const MyForm = (props: FormikProps<FormValues>) => {
     const {
         values,
         setValues,
@@ -178,10 +178,14 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
     const toppingsChangeRule = mappings(map(itemValues).to(toppings));
 
     // Crust Rules
-    const crustOptionsRule = map(Object.keys(PizzaCrust).map(v => ({
-        value: v.toLowerCase(),
-        label: v
-    }) as Item)).to(optionsValue);
+    const crustOptionsRule = map(Object.keys(PizzaCrust))
+        .using(converter((obj, input: Function<string[]>, ctx) => {
+            return input.get(obj, ctx)!.map(v => ({
+                value: v.toLowerCase(),
+                label: v
+            }) as Item)
+        }))
+        .to(optionsValue);
 
     const crustChangeRule = map(singleItemValue).using(itemValueConverter).to(crust);
 
@@ -200,8 +204,8 @@ const MyForm: React.SFC<FormikProps<FormValues>> = props => {
                     touched={touched.city}
                 />
                 <DOOVField
-                    label="Size"
-                    name="How hungry you are?"
+                    name="size"
+                    label="How hungry you are?"
                     component={Select}
                     options={pizzaSizeOptions}
                     visibilityRule={cityNotEmpty}
@@ -293,7 +297,17 @@ const DOOVField = (props: any) => {
             <label htmlFor="function" style={{display: "block", margin: ".5rem"}}>
                 {props.label ? props.label : props.name}
             </label>
-            {props.changeRule && (<span>{props.changeRule.metadata.readable}</span>)}
+            <div>
+                {window.location.search === '?debug' && props.changeRule &&
+                (<p><strong>Change rule: </strong><br/><code>{props.changeRule.metadata.readable}</code></p>)
+                }
+                {window.location.search === '?debug' && props.visibilityRule &&
+                (<p><strong>Visibility rule: </strong><br/><code>{props.visibilityRule.metadata.readable}</code></p>)
+                }
+                {window.location.search === '?debug' && props.optionsRule &&
+                (<p><strong>Options rule: </strong><br/><code>{props.optionsRule.metadata.readable}</code></p>)
+                }
+            </div>
             <Field
                 {...props}
                 options={handleOptions()}

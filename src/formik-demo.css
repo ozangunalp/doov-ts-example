@@ -1,6 +1,6 @@
 * {
   box-sizing: border-box;
-  font-family: ;
+  /*font-family: Arial, sans-serif;*/
 }
 
 body {
@@ -21,9 +21,9 @@ a {
 }
 
 code {
-  background: #eee;
+  /*background: #eee;*/
   padding: .1rem;
-  font-family: 'Menlo';
+  font-family: 'Menlo', monospace;
   font-size: 13px;
   color: #ff00aa;
 }
