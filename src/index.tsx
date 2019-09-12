@@ -131,11 +131,15 @@ const formikEnhancer = withFormik({
 type FormValuesContext = {
     formValues: FormValues,
     setFormValues: (v: FormValues) => void
+    setFieldTouched: (field: string, isTouched?: boolean) => void
 }
 
 let FormContext = React.createContext<FormValuesContext>({
-    formValues: {} as FormValues, setFormValues: v => {
-    }
+    formValues: {} as FormValues,
+    setFormValues: v => {
+    },
+    setFieldTouched: (f, t) => {
+    },
 });
 
 const MyForm = (props: FormikProps<FormValues>) => {
@@ -145,10 +149,10 @@ const MyForm = (props: FormikProps<FormValues>) => {
         touched,
         dirty,
         errors,
-        handleBlur,
         handleSubmit,
         handleReset,
         isSubmitting,
+        setFieldTouched,
     } = props;
 
     const cityNotEmpty = when(city.notEq(emptyOption)).validate();
@@ -191,61 +195,57 @@ const MyForm = (props: FormikProps<FormValues>) => {
 
     return (
         <form onSubmit={handleSubmit}>
-            <FormContext.Provider value={{formValues: values, setFormValues: setValues}}>
+            <FormContext.Provider
+                value={{formValues: values, setFormValues: setValues, setFieldTouched: setFieldTouched}}>
                 <DOOVField
                     name="city"
                     label="Where do you live?"
                     component={Select}
+                    error={errors.city}
+                    touched={touched.city}
                     options={cities}
                     changeRule={cityChangeRule}
                     value={values.city}
-                    onBlur={handleBlur}
-                    error={errors.city}
-                    touched={touched.city}
                 />
                 <DOOVField
                     name="size"
                     label="How hungry you are?"
                     component={Select}
+                    error={errors.size}
+                    touched={touched.size}
                     options={pizzaSizeOptions}
                     visibilityRule={cityNotEmpty}
                     value={pizzaSizeOptions.find(v => v.value === values.size)}
                     changeRule={sizeChangeRule}
-                    onBlur={handleBlur}
-                    error={errors.size}
-                    touched={touched.size}
                 />
                 <DOOVField
                     name="toppings"
                     label="Which toppings you'd like?"
                     isMulti
                     component={Select}
+                    error={errors.toppings}
+                    touched={touched.toppings}
                     optionsRule={toppingsOptionsRule}
                     visibilityRule={cityNotEmpty}
                     value={values.toppings}
                     changeRule={toppingsChangeRule}
-                    onBlur={handleBlur}
-                    error={errors.toppings}
-                    touched={touched.toppings}
                 />
                 <DOOVField
                     name="crust"
                     label="Which pizza crust you'd like?"
                     component={Select}
-                    optionsRule={crustOptionsRule}
-                    visibilityRule={cityNotEmpty}
-                    changeRule={crustChangeRule}
-                    value={Object.keys(PizzaCrust).find(v => v === values.crust)}
-                    onBlur={handleBlur}
                     error={errors.crust}
                     touched={touched.crust}
+                    optionsRule={crustOptionsRule}
+                    visibilityRule={cityNotEmpty}
+                    value={Object.keys(PizzaCrust).find(v => v === values.crust)}
+                    changeRule={crustChangeRule}
                 />
                 <button
                     type="button"
                     className="outline"
                     onClick={handleReset}
-                    disabled={!dirty || isSubmitting}
-                >
+                    disabled={!dirty || isSubmitting}>
                     Reset
                 </button>
                 <button type="submit" disabled={isSubmitting}>
@@ -260,7 +260,7 @@ const MyForm = (props: FormikProps<FormValues>) => {
 
 const DOOVField = (props: any) => {
 
-    const {formValues, setFormValues} = useContext(FormContext);
+    const {formValues, setFormValues, setFieldTouched} = useContext(FormContext);
 
     const handleVisibility = () => {
         if (props.visibilityRule) {
@@ -291,6 +291,10 @@ const DOOVField = (props: any) => {
         }
     };
 
+    const handleBlur = () => {
+        setFieldTouched(props.name);
+    };
+
     return (
         handleVisibility() &&
         (<React.Fragment>
@@ -310,8 +314,10 @@ const DOOVField = (props: any) => {
             </div>
             <Field
                 {...props}
+                name={props.name}
                 options={handleOptions()}
                 onChange={handleChange}
+                onBlur={handleBlur}
             />
             {!!props.error && props.touched && (
                 <div style={{color: "red", marginTop: ".5rem"}}>
