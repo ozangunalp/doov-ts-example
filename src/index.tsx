@@ -172,6 +172,7 @@ const MyForm = (props: FormikProps<FormValues>) => {
                 return items!.filter(v => v.value !== 'pineapple')
             })).to(toppings)));
 
+    // Size
     const sizeChangeRule = map(singleItemValue).using(itemValueConverter).to(size);
 
     // Toppings Rules
