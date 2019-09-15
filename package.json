@@ -1,5 +1,5 @@
 {
-  "name": "doov-ts example",
+  "name": "doov-ts-example",
   "version": "0.1.0",
   "private": true,
   "main": "src/index.tsx",

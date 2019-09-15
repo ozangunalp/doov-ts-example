@@ -7,20 +7,23 @@ import {Field, FormikProps, withFormik} from "formik";
 import Select from "react-select";
 import {DisplayFormikState} from "./formik-helper";
 import * as DOOV from 'doov';
-import {converter, DefaultContext, Function, FunctionMetadata, map, mappings, StringFunction, when} from 'doov';
+import {converter, DefaultContext, Function, FunctionMetadata, map, mappings, when} from 'doov';
 
 export type PizzaSize = 'S' | 'M' | 'L' | 'XL';
 
 export enum PizzaCrust {
     Neapolitan = 'Neapolitan',
-    NewYork = 'NewYork',
-    StLouis = 'StLouis',
+    NewYork = 'New York',
+    StLouis = 'St. Louis',
     Pan = 'Pan',
-    DeepDish = 'DeepDish',
+    DeepDish = 'Deep Dish',
     Sicilian = 'Sicilian',
 }
 
-export type City = 'Napoli' | 'Paris' | 'Chicago' | 'New York' | 'Hawaii';
+const crustOptions: Item[] = Object.keys(PizzaCrust).map(v => ({value: v, label: PizzaCrust[v]}));
+console.log(crustOptions);
+
+export type City = 'napoli' | 'paris' | 'chicago' | 'new_york' | 'hawaii';
 
 export interface PizzaSpec {
     size?: PizzaSize;
@@ -36,9 +39,9 @@ export interface PizzaOrder {
 
 interface FormValues {
     toppings: string[];
-    city: City;
-    size: PizzaSize;
-    crust: PizzaCrust;
+    city?: City;
+    size?: PizzaSize;
+    crust?: PizzaCrust;
 }
 
 type Item = {
@@ -59,7 +62,7 @@ const toppingOptions: Item[] = [
 const cities: Item[] = [
     {value: "napoli", label: "Napoli"},
     {value: "paris", label: "Paris"},
-    {value: "new york", label: "New York"},
+    {value: "new_york", label: "New York"},
     {value: "chicago", label: "Chicago"},
     {value: "hawaii", label: "Hawaii"}
 ];
@@ -71,12 +74,10 @@ const pizzaSizeOptions: Item[] = [
     {value: 'XL', label: "XLarge"},
 ];
 
-const emptyOption: Item = {value: "", label: ""};
-
-const toppings = DOOV.iterable(DOOV.field<object, Item[]>('toppings'));
-const city = DOOV.f(DOOV.field<object, Item>('city'));
-const size = DOOV.string(DOOV.field<object, string>('size'));
-const crust = DOOV.string(DOOV.field<object, string>('crust'));
+const toppings = DOOV.iterable(DOOV.field<object, string[]>('toppings'));
+const city = DOOV.f(DOOV.field<object, City>('city'));
+const size = DOOV.string(DOOV.field<object, PizzaSize>('size'));
+const crust = DOOV.string(DOOV.field<object, PizzaCrust>('crust'));
 
 const optionsValue = new Function<Item[]>(new FunctionMetadata('field options'), (obj: object, ctx?: any) => {
     return ctx!.props['options'];
@@ -89,19 +90,16 @@ const itemValues = Function.contextual(new FunctionMetadata('field items'), (obj
 });
 
 const singleItemValue = Function.contextual(new FunctionMetadata('field item'), (obj, ctx) => {
-    return ctx!.props['value'] as unknown as Item;
+    return (ctx!.props['value'] as unknown as Item).value;
 });
 
-const cityNotEmpty = when(city.notEq(emptyOption)).validate();
+const cityNotEmpty = when(city.isDefined()).validate();
 
 const emptyToppings = when(toppings.isNotEmpty()).validate();
 
 const formikEnhancer = withFormik({
     mapPropsToValues: props => ({
         toppings: [],
-        size: '',
-        crust: emptyOption,
-        city: emptyOption,
     }),
     validate: (values) => {
         let errors: any = {};
@@ -115,11 +113,7 @@ const formikEnhancer = withFormik({
     },
     handleSubmit: (values, {setSubmitting}) => {
         console.log(values);
-        const payload = {
-            ...values,
-            city: values.city.value,
-            topics: values.toppings.map((t: Item) => t.value)
-        };
+        const payload = {...values};
         setTimeout(() => {
             alert(JSON.stringify(payload, null, 2));
             setSubmitting(false);
@@ -155,44 +149,47 @@ const MyForm = (props: FormikProps<FormValues>) => {
         setFieldTouched,
     } = props;
 
-    const cityNotEmpty = when(city.notEq(emptyOption)).validate();
+    const cityNotEmpty = when(city.isDefined()).validate();
 
-    const itemValueConverter = converter((obj, input: Function<Item>, context) => {
+    // const itemValueConverter = converter((obj, input: Function<Item>, context) => {
+    //     let v = input.get(obj, context);
+    //     return v ? v.value : v;
+    // }, 'item to value');
+
+    const itemsStringConverter = converter((obj, input: Function<Item[]>, context) => {
         let v = input.get(obj, context);
-        return v ? v.value : v;
-    }, 'item to value');
+        return v ? v.map(value => value.value) : [];
+    }, 'items to values');
 
     // City Rules
     const cityChangeRule = mappings(
         // update City
         map(singleItemValue).to(city),
         // update Toppings
-        when(city.mapTo(StringFunction, v => v ? v.value : undefined).matchAny('hawaii', 'napoli'))
+        when(city.matchAny('hawaii', 'napoli'))
             .then(map(toppings.mapTo(Function, items => {
-                return items!.filter(v => v.value !== 'pineapple')
+                return items ? items.filter(v => v !== 'pineapple') : []
             })).to(toppings)));
 
     // Size
-    const sizeChangeRule = map(singleItemValue).using(itemValueConverter).to(size);
+    const sizeChangeRule = map(singleItemValue).to(size);
 
     // Toppings Rules
-    const toppingsOptionsRule = when(city.mapTo(StringFunction, v => v ? v.value : undefined).matchAny('hawaii', 'napoli'))
+    const toppingsOptionsRule = when(city.matchAny('hawaii', 'napoli'))
         .then(map(toppingOptions.filter(v => v.value !== 'pineapple')).to(optionsValue))
         .otherwise(map(toppingOptions).to(optionsValue));
 
-    const toppingsChangeRule = mappings(map(itemValues).to(toppings));
+    const toppingsChangeRule = mappings(map(itemValues).using(itemsStringConverter).to(toppings));
 
     // Crust Rules
-    const crustOptionsRule = map(Object.keys(PizzaCrust))
-        .using(converter((obj, input: Function<string[]>, ctx) => {
-            return input.get(obj, ctx)!.map(v => ({
-                value: v.toLowerCase(),
-                label: v
-            }) as Item)
-        }))
+    const crustOptionsRule = map(crustOptions)
+        // .using(converter((obj, input: Function<string[]>, ctx) => {
+        //     let value = input.get(obj, ctx);
+        //     return value ? value.map(v => ({value: v, label: PizzaCrust[v]} as Item)) : []
+        // }))
         .to(optionsValue);
 
-    const crustChangeRule = map(singleItemValue).using(itemValueConverter).to(crust);
+    const crustChangeRule = map(singleItemValue).to(crust);
 
     return (
         <form onSubmit={handleSubmit}>
@@ -206,7 +203,7 @@ const MyForm = (props: FormikProps<FormValues>) => {
                     touched={touched.city}
                     options={cities}
                     changeRule={cityChangeRule}
-                    value={values.city}
+                    value={cities.find(v => v.value === values.city)}
                 />
                 <DOOVField
                     name="size"
@@ -228,7 +225,7 @@ const MyForm = (props: FormikProps<FormValues>) => {
                     touched={touched.toppings}
                     optionsRule={toppingsOptionsRule}
                     visibilityRule={cityNotEmpty}
-                    value={values.toppings}
+                    value={values.toppings.map(v => toppingOptions.find(item => item.value === v))}
                     changeRule={toppingsChangeRule}
                 />
                 <DOOVField
@@ -239,7 +236,7 @@ const MyForm = (props: FormikProps<FormValues>) => {
                     touched={touched.crust}
                     optionsRule={crustOptionsRule}
                     visibilityRule={cityNotEmpty}
-                    value={Object.keys(PizzaCrust).find(v => v === values.crust)}
+                    value={crustOptions.find(v => v.value === values.crust)}
                     changeRule={crustChangeRule}
                 />
                 <button
