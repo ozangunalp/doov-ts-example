@@ -79,18 +79,25 @@ const city = DOOV.f(DOOV.field<object, City>('city'));
 const size = DOOV.string(DOOV.field<object, PizzaSize>('size'));
 const crust = DOOV.string(DOOV.field<object, PizzaCrust>('crust'));
 
-const optionsValue = new Function<Item[]>(new FunctionMetadata('field options'), (obj: object, ctx?: any) => {
+const fieldOptions = new Function<Item[]>(new FunctionMetadata('field options'), (obj: object, ctx?: any) => {
     return ctx!.props['options'];
 }, (obj: object, value: Item[], ctx?) => {
     return (ctx!.props['options'] as unknown as Item[]) = value;
 });
 
-const itemValues = Function.contextual(new FunctionMetadata('field items'), (obj, ctx) => {
+const itemValues = new Function<Item[]>(new FunctionMetadata('field values'), (obj, ctx) => {
     return ctx!.props['value'] as unknown as Item[];
+}, (obj, value: Item[], ctx) => {
+    return (ctx!.props['value'] as unknown as Item[]) = value
 });
 
-const singleItemValue = Function.contextual(new FunctionMetadata('field item'), (obj, ctx) => {
+const fieldValue = new Function<string>(new FunctionMetadata('field value'), (obj, ctx) => {
     return (ctx!.props['value'] as unknown as Item).value;
+});
+
+const fieldItem = Function.consumer(new FunctionMetadata('field item'),
+    (obj: object, value: Item, ctx?) => {
+    return (ctx!.props['value'] as unknown as Item) = value;
 });
 
 const cityNotEmpty = when(city.isDefined()).validate();
@@ -98,9 +105,6 @@ const cityNotEmpty = when(city.isDefined()).validate();
 const emptyToppings = when(toppings.isNotEmpty()).validate();
 
 const formikEnhancer = withFormik({
-    mapPropsToValues: props => ({
-        toppings: [],
-    }),
     validate: (values) => {
         let errors: any = {};
         if (!cityNotEmpty.execute(values).value) {
@@ -151,45 +155,46 @@ const MyForm = (props: FormikProps<FormValues>) => {
 
     const cityNotEmpty = when(city.isDefined()).validate();
 
-    // const itemValueConverter = converter((obj, input: Function<Item>, context) => {
-    //     let v = input.get(obj, context);
-    //     return v ? v.value : v;
-    // }, 'item to value');
-
     const itemsStringConverter = converter((obj, input: Function<Item[]>, context) => {
         let v = input.get(obj, context);
         return v ? v.map(value => value.value) : [];
     }, 'items to values');
 
+    const valueToItem = (items: Item[]) => converter((obj, input, ctx) => {
+        let value = input.get(obj, ctx);
+        return items.find(v => v.value === value)
+    }, 'value to Item');
+
     // City Rules
     const cityChangeRule = mappings(
         // update City
-        map(singleItemValue).to(city),
+        map(fieldValue).to(city),
         // update Toppings
-        when(city.matchAny('hawaii', 'napoli'))
-            .then(map(toppings.mapTo(Function, items => {
+        when(city.matchAny('hawaii', 'napoli')).then(
+            map(toppings).using(converter((obj, input, ctx) => {
+                const items = input.get(obj, ctx);
                 return items ? items.filter(v => v !== 'pineapple') : []
-            })).to(toppings)));
+            }, 'filter pineapple')).to(toppings)));
+    const cityValueRule = map(city).using(valueToItem(cities)).to(fieldItem);
 
-    // Size
-    const sizeChangeRule = map(singleItemValue).to(size);
+    // Size Rules
+    const sizeChangeRule = map(fieldValue).to(size);
+    const sizeValueRule = map(size).using(valueToItem(pizzaSizeOptions)).to(fieldItem);
 
     // Toppings Rules
     const toppingsOptionsRule = when(city.matchAny('hawaii', 'napoli'))
-        .then(map(toppingOptions.filter(v => v.value !== 'pineapple')).to(optionsValue))
-        .otherwise(map(toppingOptions).to(optionsValue));
-
-    const toppingsChangeRule = mappings(map(itemValues).using(itemsStringConverter).to(toppings));
+        .then(map(toppingOptions.filter(v => v.value !== 'pineapple')).to(fieldOptions))
+        .otherwise(map(toppingOptions).to(fieldOptions));
+    const toppingsChangeRule = map(itemValues).using(itemsStringConverter).to(toppings);
+    const toppingsValueRule = map(toppings).using(converter((obj, input, ctx) => {
+        let value = input.get(obj, ctx);
+        return value ? value.map(v => toppingOptions.find(item => item.value === v)) : [];
+    })).to(itemValues);
 
     // Crust Rules
-    const crustOptionsRule = map(crustOptions)
-        // .using(converter((obj, input: Function<string[]>, ctx) => {
-        //     let value = input.get(obj, ctx);
-        //     return value ? value.map(v => ({value: v, label: PizzaCrust[v]} as Item)) : []
-        // }))
-        .to(optionsValue);
-
-    const crustChangeRule = map(singleItemValue).to(crust);
+    const crustOptionsRule = map(crustOptions).to(fieldOptions);
+    const crustChangeRule = map(fieldValue).to(crust);
+    const crustValueRule = map(crust).using(valueToItem(crustOptions)).to(fieldItem);
 
     return (
         <form onSubmit={handleSubmit}>
@@ -203,7 +208,7 @@ const MyForm = (props: FormikProps<FormValues>) => {
                     touched={touched.city}
                     options={cities}
                     changeRule={cityChangeRule}
-                    value={cities.find(v => v.value === values.city)}
+                    valueRule={cityValueRule}
                 />
                 <DOOVField
                     name="size"
@@ -213,7 +218,7 @@ const MyForm = (props: FormikProps<FormValues>) => {
                     touched={touched.size}
                     options={pizzaSizeOptions}
                     visibilityRule={cityNotEmpty}
-                    value={pizzaSizeOptions.find(v => v.value === values.size)}
+                    valueRule={sizeValueRule}
                     changeRule={sizeChangeRule}
                 />
                 <DOOVField
@@ -225,7 +230,7 @@ const MyForm = (props: FormikProps<FormValues>) => {
                     touched={touched.toppings}
                     optionsRule={toppingsOptionsRule}
                     visibilityRule={cityNotEmpty}
-                    value={values.toppings.map(v => toppingOptions.find(item => item.value === v))}
+                    valueRule={toppingsValueRule}
                     changeRule={toppingsChangeRule}
                 />
                 <DOOVField
@@ -236,7 +241,7 @@ const MyForm = (props: FormikProps<FormValues>) => {
                     touched={touched.crust}
                     optionsRule={crustOptionsRule}
                     visibilityRule={cityNotEmpty}
-                    value={crustOptions.find(v => v.value === values.crust)}
+                    valueRule={crustValueRule}
                     changeRule={crustChangeRule}
                 />
                 <button
@@ -293,6 +298,16 @@ const DOOVField = (props: any) => {
         setFieldTouched(props.name);
     };
 
+    const handleValue = () => {
+        if (props.valueRule) {
+            const ctx = new DefaultContext();
+            props.valueRule.execute(formValues, ctx);
+            return ctx.props['value'];
+        } else {
+            return props.value;
+        }
+    };
+
     return (
         handleVisibility() &&
         (<React.Fragment>
@@ -309,6 +324,9 @@ const DOOVField = (props: any) => {
                 {window.location.search === '?debug' && props.optionsRule &&
                 (<p><strong>Options rule: </strong><br/><code>{props.optionsRule.metadata.readable}</code></p>)
                 }
+                {window.location.search === '?debug' && props.valueRule &&
+                (<p><strong>Value rule: </strong><br/><code>{props.valueRule.metadata.readable}</code></p>)
+                }
             </div>
             <Field
                 {...props}
@@ -316,6 +334,7 @@ const DOOVField = (props: any) => {
                 options={handleOptions()}
                 onChange={handleChange}
                 onBlur={handleBlur}
+                value={handleValue()}
             />
             {!!props.error && props.touched && (
                 <div style={{color: "red", marginTop: ".5rem"}}>
