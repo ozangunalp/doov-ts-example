@@ -46,10 +46,10 @@ const pizzaSizeOptions: Item[] = [
 ];
 
 // Fields
-const toppings = DOOV.iterable(DOOV.field<object, string[]>('toppings'));
-const city = DOOV.f(DOOV.field<object, City>('city'));
-const size = DOOV.string(DOOV.field<object, PizzaSize>('size'));
-const crust = DOOV.f(DOOV.field<object, PizzaCrust>('crust'));
+const toppings = DOOV.iterable(DOOV.field<string[]>('toppings'));
+const city = DOOV.f(DOOV.field<City>('city'));
+const size = DOOV.string(DOOV.field<PizzaSize>('size'));
+const crust = DOOV.f(DOOV.field<PizzaCrust>('crust'));
 
 // Validation Rules
 const cityNotEmpty = when(city.isNullOrUndefined()).validate();
