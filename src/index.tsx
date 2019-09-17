@@ -11,7 +11,14 @@ import {DOOVField, fieldItem, fieldOptions, fieldValue, Item, itemValues} from "
 import {FormContext, FormValues} from "./FormContext";
 import {City, PizzaCrust, PizzaSize} from "./Pizza";
 
-const crustOptions: Item[] = Object.keys(PizzaCrust).map(v => ({value: v, label: PizzaCrust[v]}));
+const crustOptions: Item[] = [
+    {value: "neapolitan", label: "Neapolitan"},
+    {value: "new_york", label: "New York"},
+    {value: "st_louis", label: "St. Louis"},
+    {value: "pan", label: "Pan"},
+    {value: "deep_dish", label: "Deep Dish"},
+    {value: "sicilian", label: "Sicilian"},
+];
 
 const toppingOptions: Item[] = [
     {value: "cream_sauce", label: "Cream Sauce"},
@@ -38,22 +45,23 @@ const pizzaSizeOptions: Item[] = [
     {value: 'XL', label: "XLarge"},
 ];
 
+// Fields
 const toppings = DOOV.iterable(DOOV.field<object, string[]>('toppings'));
 const city = DOOV.f(DOOV.field<object, City>('city'));
 const size = DOOV.string(DOOV.field<object, PizzaSize>('size'));
-const crust = DOOV.string(DOOV.field<object, PizzaCrust>('crust'));
+const crust = DOOV.f(DOOV.field<object, PizzaCrust>('crust'));
 
-
-const cityNotEmpty = when(city.isDefined()).validate();
-const emptyToppings = when(toppings.isNotEmpty()).validate();
+// Validation Rules
+const cityNotEmpty = when(city.isNullOrUndefined()).validate();
+const emptyToppings = when(toppings.isEmpty()).validate();
 
 const formikEnhancer = withFormik({
     validate: (values) => {
         let errors: any = {};
-        if (!cityNotEmpty.execute(values).value) {
+        if (cityNotEmpty.execute(values).value) {
             errors.city = 'Required';
         }
-        if (!emptyToppings.execute(values).value) {
+        if (emptyToppings.execute(values).value) {
             errors.toppings = 'Add at least one topping';
         }
         return errors;

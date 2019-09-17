@@ -1,14 +1,7 @@
 
 export type PizzaSize = 'S' | 'M' | 'L' | 'XL';
 
-export enum PizzaCrust {
-    Neapolitan = 'Neapolitan',
-    NewYork = 'New York',
-    StLouis = 'St. Louis',
-    Pan = 'Pan',
-    DeepDish = 'Deep Dish',
-    Sicilian = 'Sicilian',
-}
+export type PizzaCrust = 'neapolitan' | 'new_york' | 'st_louis' | 'pan' | 'deep_dish' | 'Sicilian';
 
 export type City = 'napoli' | 'paris' | 'chicago' | 'new_york' | 'hawaii';
 
